@@ -1,0 +1,12 @@
+*.jpeg
+*.jpg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.svg
+*.webp
+*.HEIC
+
+*.pyc
