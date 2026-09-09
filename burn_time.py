@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-burn_time.py — Brennt das Aufnahmedatum eines Fotos sichtbar in das Bild ein
-(wie der altmodische Datumsstempel analoger Kompaktkameras).
+burn_time.py — Burns the recording date of a photo visibly into the image
+(like the old-fashioned date stamp of analog compact cameras).
 
-Datumsquelle (in dieser Reihenfolge):
-  1. EXIF-Metadaten (DateTimeOriginal / DateTimeDigitized / DateTime)
-  2. --date Argument, falls angegeben (manueller Fallback / Override)
-  3. Dateierstellungsdatum des Betriebssystems (macOS: st_birthtime)
+Date source (in this order):
+  1. EXIF metadata (DateTimeOriginal / DateTimeDigitized / DateTime)
+  2. --date argument, if specified (manual fallback / override)
+  3. File creation date from the operating system (macOS: st_birthtime)
 
-Benötigt: Pillow (pip3 install Pillow)
-Optional für HEIC/HEIF-Fotos aus der Fotos-App: pip3 install pillow-heif
+Requires: Pillow (pip3 install Pillow)
+Optional for HEIC/HEIF photos from the Photos app: pip3 install pillow-heif
 """
 
 import argparse
@@ -22,15 +22,15 @@ try:
     from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor, ImageOps
 except ImportError:
     print(
-        "Fehler: Pillow ist nicht installiert.\n"
-        "Bitte installieren mit:  pip3 install Pillow",
+        "Error: Pillow is not installed.\n"
+        "Please install with:  pip3 install Pillow",
         file=sys.stderr,
     )
     sys.exit(1)
 
 
 # --------------------------------------------------------------------------
-# Konstanten
+# Constants
 # --------------------------------------------------------------------------
 
 MANUAL_DATE_FORMATS = [
@@ -42,9 +42,9 @@ MANUAL_DATE_FORMATS = [
     "%d/%m/%Y",
 ]
 
-# Bevorzugte Schriften auf macOS (Reihenfolge = Priorität).
-# Eine monospaced/technische Schrift wirkt am ehesten wie ein "eingebrannter"
-# Kamera-Zeitstempel.
+# Preferred fonts on macOS (order = priority).
+# A monospaced/technical font looks most like a "burned-in"
+# camera timestamp.
 DEFAULT_FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Courier New Bold.ttf",
     "/System/Library/Fonts/Supplemental/Courier New.ttf",
@@ -57,30 +57,30 @@ DEFAULT_FONT_CANDIDATES = [
 ]
 
 EPILOG_TEXT = """\
-Beispiele:
+Examples:
   %(prog)s *.jpg
-      Datum/Uhrzeit im deutschen Standardformat, oben links, gelb.
+      Date/time in German standard format, top left, yellow.
 
   %(prog)s *.jpg --position tr --color red --format "yyyy/mm/dd hh:mm:ss"
-      Oben rechts, rote Schrift, Format JJJJ/MM/TT HH:MM:SS.
+      Top right, red text, format YYYY/MM/DD HH:MM:SS.
 
   %(prog)s IMG_1234.HEIC --date "24.12.2019 18:00:00"
-      Erzwingt ein Datum, falls EXIF nicht verfügbar/vertrauenswürdig ist.
+      Enforces a date if EXIF is unavailable/unreliable.
 
   %(prog)s *.jpg --in-place --quality 90
-      Überschreibt die Originaldateien direkt (Vorsicht: nicht umkehrbar).
+      Overwrites the original files directly (Warning: not reversible).
 
-Positionen: tl (oben links, Standard) · tr (oben rechts) · bl (unten links)
-            br (unten rechts) · c (zentriert)
+Positions: tl (top left, default) · tr (top right) · bl (bottom left)
+           br (bottom right) · c (center)
 
-Format-Platzhalter (Groß-/Kleinschreibung egal, "mm" nach "hh" = Minuten):
-  yyyy=Jahr(4)  yy=Jahr(2)  mm=Monat  dd=Tag  hh=Stunde  mm=Minute  ss=Sekunde
-  Alternativ: klassisches strftime-Muster mit '%%', z.B. "%%d.%%m.%%Y %%H:%%M"
+Format placeholders (case-insensitive, "mm" after "hh" = minutes):
+  yyyy=Year(4)  yy=Year(2)  mm=Month  dd=Day  hh=Hour  mm=Minute  ss=Second
+  Alternatively: classic strftime pattern with '%%', e.g. "%%d.%%m.%%Y %%H:%%M"
 """
 
 
 # --------------------------------------------------------------------------
-# Datumsermittlung
+# Date determination
 # --------------------------------------------------------------------------
 
 def _parse_exif_datetime(value):
@@ -94,14 +94,14 @@ def _parse_exif_datetime(value):
 
 
 def read_exif_date(path: Path):
-    """Liest DateTimeOriginal/DateTimeDigitized/DateTime aus den EXIF-Daten."""
+    """Reads DateTimeOriginal/DateTimeDigitized/DateTime from EXIF data."""
     try:
         with Image.open(path) as img:
-            # Ältere, aber sehr zuverlässige API: liefert ein flaches Dict,
-            # das bei JPEGs i.d.R. auch die Exif-SubIFD-Tags enthält.
+            # Older, but very reliable API: returns a flat dict,
+            # which for JPEGs typically also contains the Exif-SubIFD tags.
             exif_data = None
             try:
-                exif_data = img._getexif()  # noqa: SLF001 (bewusst genutzt)
+                exif_data = img._getexif()  # noqa: SLF001 (intentionally used)
             except Exception:
                 exif_data = None
 
@@ -113,7 +113,7 @@ def read_exif_date(path: Path):
                         if dt:
                             return dt
 
-            # Moderne API als Fallback (z.B. PNG, TIFF, HEIC via Plugin)
+            # Modern API as fallback (e.g. PNG, TIFF, HEIC via plugin)
             exif = img.getexif()
             if exif:
                 val = exif.get(306)
@@ -122,7 +122,7 @@ def read_exif_date(path: Path):
                     if dt:
                         return dt
                 try:
-                    exif_ifd = exif.get_ifd(0x8769)  # Exif-IFD-Pointer
+                    exif_ifd = exif.get_ifd(0x8769)  # Exif-IFD pointer
                     for tag_id in (36867, 36868):
                         val = exif_ifd.get(tag_id)
                         if val:
@@ -137,7 +137,7 @@ def read_exif_date(path: Path):
 
 
 def get_file_creation_date(path: Path):
-    """Dateierstellungsdatum (macOS: st_birthtime, sonst Fallback auf mtime)."""
+    """File creation date (macOS: st_birthtime, otherwise fallback to mtime)."""
     try:
         stat = path.stat()
         ts = getattr(stat, "st_birthtime", None)
@@ -155,24 +155,24 @@ def parse_manual_date(value: str) -> datetime:
         except ValueError:
             continue
     raise argparse.ArgumentTypeError(
-        f"Kann Datum '{value}' nicht lesen. Beispiele: "
-        f"'2023-06-15 14:30:00' oder '15.06.2023 14:30:00'"
+        f"Cannot read date '{value}'. Examples: "
+        f"'2023-06-15 14:30:00' or '15.06.2023 14:30:00'"
     )
 
 
 # --------------------------------------------------------------------------
-# Formatierung (einfache Platzhalter -> strftime)
+# Formatting (simple placeholders -> strftime)
 # --------------------------------------------------------------------------
 
 def translate_format(fmt: str) -> str:
     """
-    Übersetzt ein einfaches Format wie 'dd.mm.yyyy hh:mm:ss' in ein
-    strftime-Muster. Enthält der String bereits ein '%', wird er
-    unverändert als strftime-Muster verwendet (Profi-Modus).
+    Translates a simple format like 'dd.mm.yyyy hh:mm:ss' into a
+    strftime pattern. If the string already contains a '%', it is
+    used unmodified as a strftime pattern (expert mode).
 
-    'mm' ist zweideutig (Monat vs. Minute): alles VOR dem ersten 'hh'
-    gilt als Monat, alles DANACH als Minute. Ein explizit großgeschriebenes
-    'MM' wird immer als Monat interpretiert.
+    'mm' is ambiguous (month vs. minute): everything BEFORE the first 'hh'
+    counts as month, everything AFTER as minute. An explicitly capitalized
+    'MM' is always interpreted as month.
     """
     if "%" in fmt:
         return fmt
@@ -220,7 +220,7 @@ def translate_format(fmt: str) -> str:
 
 
 # --------------------------------------------------------------------------
-# Bildbearbeitung
+# Image processing
 # --------------------------------------------------------------------------
 
 def load_font(font_path, size):
@@ -270,22 +270,22 @@ def burn_text_into_image(img: Image.Image, text: str, args) -> Image.Image:
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     x, y = compute_position(args.position, (W, H), (tw, th), margin)
-    # Font-Metriken (negative Ascent-Offsets) ausgleichen, damit der
-    # sichtbare Text exakt an der Zielposition beginnt.
+    # Compensate for font metrics (negative ascent offsets) so that the
+    # visible text starts exactly at the target position.
     x -= bbox[0]
     y -= bbox[1]
 
     try:
         color_rgb = ImageColor.getrgb(args.color)
     except ValueError:
-        print(f"⚠️  Unbekannte Farbe '{args.color}', verwende 'yellow'.", file=sys.stderr)
+        print(f"⚠️  Unknown color '{args.color}', using 'yellow'.", file=sys.stderr)
         color_rgb = ImageColor.getrgb("yellow")
     color_rgba = color_rgb + (255,)
 
     base = rgb_img.convert("RGBA")
 
-    # Weicher, leicht verschobener Schatten -> gibt dem Text Tiefe und
-    # sorgt für Lesbarkeit auf hellem wie dunklem Untergrund.
+    # Soft, slightly offset shadow -> gives the text depth and
+    # ensures readability on both light and dark backgrounds.
     shadow_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow_layer)
     offset = max(2, font_size // 12)
@@ -296,7 +296,7 @@ def burn_text_into_image(img: Image.Image, text: str, args) -> Image.Image:
     blur_radius = max(1, font_size // 14)
     shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=blur_radius))
 
-    # Scharfer, farbiger Text mit dunkler Kontur -> "eingebrannter" Look.
+    # Sharp, colored text with dark outline -> "burned-in" look.
     text_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_layer)
     stroke_w = max(1, font_size // 18)
@@ -321,9 +321,9 @@ def determine_output_path(path: Path, args) -> Path:
 def process_file(path: Path, args) -> bool:
     try:
         img = Image.open(path)
-        img = ImageOps.exif_transpose(img)  # korrekte Ausrichtung anwenden
+        img = ImageOps.exif_transpose(img)  # apply correct orientation
     except Exception as e:
-        print(f"⚠️  Konnte '{path.name}' nicht öffnen: {e}", file=sys.stderr)
+        print(f"⚠️  Could not open '{path.name}': {e}", file=sys.stderr)
         return False
 
     exif_bytes = img.info.get("exif")
@@ -336,9 +336,9 @@ def process_file(path: Path, args) -> bool:
             source = "Argument"
         else:
             dt = get_file_creation_date(path)
-            source = "Dateisystem"
+            source = "Filesystem"
     if dt is None:
-        print(f"⚠️  Kein Datum für '{path.name}' ermittelbar – übersprungen.", file=sys.stderr)
+        print(f"⚠️  No date found for '{path.name}' – skipped.", file=sys.stderr)
         return False
 
     strftime_pattern = translate_format(args.format)
@@ -347,7 +347,7 @@ def process_file(path: Path, args) -> bool:
     out_path = determine_output_path(path, args)
 
     if args.dry_run:
-        print(f"[dry-run] {path.name}: '{text}' (Quelle: {source}) -> {out_path.name} @ {args.position}")
+        print(f"[dry-run] {path.name}: '{text}' (Source: {source}) -> {out_path.name} @ {args.position}")
         return True
 
     final_img = burn_text_into_image(img, text, args)
@@ -362,13 +362,13 @@ def process_file(path: Path, args) -> bool:
     try:
         final_img.save(out_path, **save_kwargs)
     except Exception as e:
-        print(f"⚠️  Konnte '{out_path.name}' nicht speichern: {e}", file=sys.stderr)
+        print(f"⚠️  Could not save '{out_path.name}': {e}", file=sys.stderr)
         return False
 
     if args.verbose:
-        print(f"✅ {path.name}: '{text}' (Quelle: {source}) -> {out_path}")
+        print(f"✅ {path.name}: '{text}' (Source: {source}) -> {out_path}")
     else:
-        print(f"✅ {path.name} -> {out_path.name}  ('{text}', Quelle: {source})")
+        print(f"✅ {path.name} -> {out_path.name}  ('{text}', Source: {source})")
     return True
 
 
@@ -382,7 +382,7 @@ def expand_files(patterns):
         if any(ch in p for ch in "*?["):
             matches = sorted(glob.glob(p))
             if not matches:
-                print(f"⚠️  Kein Treffer für Muster: {p}", file=sys.stderr)
+                print(f"⚠️  No matches for pattern: {p}", file=sys.stderr)
             files.extend(matches)
         else:
             files.append(p)
@@ -406,71 +406,71 @@ def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog="burn_time.py",
         description=(
-            "Brennt das Aufnahmedatum eines Fotos sichtbar in das Bild ein "
-            "(wie ein altmodischer Kamera-Datumsstempel)."
+            "Burns the recording date of a photo visibly into the image "
+            "(like an old-fashioned camera date stamp)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=EPILOG_TEXT,
     )
     parser.add_argument(
         "files", nargs="+",
-        help="Ein oder mehrere Bilddateien bzw. Glob-Muster (z.B. *.jpg)",
+        help="One or more image files or glob patterns (e.g. *.jpg)",
     )
     parser.add_argument(
         "--position", "-p", default="tl",
         choices=["tl", "tr", "bl", "br", "c", "center"],
-        help="Position des Datumsstempels (Standard: tl = oben links)",
+        help="Position of the date stamp (default: tl = top left)",
     )
     parser.add_argument(
         "--color", "-c", default="yellow",
-        help="Textfarbe, z.B. 'yellow', 'red', '#FFAA00' (Standard: yellow)",
+        help="Text color, e.g. 'yellow', 'red', '#FFAA00' (default: yellow)",
     )
     parser.add_argument(
         "--format", "-f", default="dd.mm.yyyy HH:mm:ss",
         help=(
-            "Datumsformat. Einfache Platzhalter yyyy/mm/dd/hh/mm/ss ODER "
-            "strftime-Muster mit '%%'. Standard: 'dd.mm.yyyy HH:mm:ss'"
+            "Date format. Simple placeholders yyyy/mm/dd/hh/mm/ss OR "
+            "strftime pattern with '%%'. Default: 'dd.mm.yyyy HH:mm:ss'"
         ),
     )
-    parser.add_argument("--font", help="Pfad zu einer eigenen .ttf/.otf Schriftdatei")
+    parser.add_argument("--font", help="Path to a custom .ttf/.otf font file")
     parser.add_argument(
         "--font-size", type=int, default=None,
-        help="Schriftgröße in Pixel (Standard: automatisch, ~3.5%% der Bildhöhe)",
+        help="Font size in pixels (default: automatic, ~3.5%% of image height)",
     )
     parser.add_argument(
         "--margin", type=int, default=None,
-        help="Abstand vom Bildrand in Pixel (Standard: automatisch)",
+        help="Distance from image edge in pixels (default: automatic)",
     )
     parser.add_argument(
         "--date", default=None,
         help=(
-            "Manuelles Datum als Fallback bzw. Override, falls kein EXIF-Datum "
-            "vorhanden ist. Format: '2023-06-15 14:30:00' oder '15.06.2023 14:30:00'"
+            "Manual date as fallback or override if no EXIF date is available. "
+            "Format: '2023-06-15 14:30:00' or '15.06.2023 14:30:00'"
         ),
     )
     parser.add_argument(
         "--output-dir", "-o", default=None,
-        help="Zielverzeichnis für bearbeitete Bilder (Standard: gleiches Verzeichnis)",
+        help="Output directory for processed images (default: same directory)",
     )
     parser.add_argument(
         "--suffix", default="_dated",
-        help="Suffix für Ausgabedateinamen (Standard: '_dated'); ignoriert bei --in-place",
+        help="Suffix for output filenames (default: '_dated'); ignored with --in-place",
     )
     parser.add_argument(
         "--in-place", action="store_true",
-        help="Originaldatei direkt überschreiben (Achtung: nicht umkehrbar!)",
+        help="Overwrite original file directly (Warning: not reversible!)",
     )
     parser.add_argument(
         "--quality", type=int, default=95,
-        help="JPEG-Qualität der Ausgabe (Standard: 95)",
+        help="JPEG quality of output (default: 95)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
-        help="Nur anzeigen, was passieren würde, ohne Dateien zu schreiben",
+        help="Only show what would happen, without writing files",
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true",
-        help="Ausführliche Ausgabe",
+        help="Verbose output",
     )
     return parser
 
@@ -481,7 +481,7 @@ def main():
 
     if args.date:
         try:
-            parse_manual_date(args.date)  # nur zur Validierung
+            parse_manual_date(args.date)  # validation only
         except argparse.ArgumentTypeError as e:
             parser.error(str(e))
 
@@ -489,13 +489,13 @@ def main():
 
     paths = [Path(f) for f in expand_files(args.files)]
     if not paths:
-        print("Keine Dateien gefunden.", file=sys.stderr)
+        print("No files found.", file=sys.stderr)
         sys.exit(1)
 
     ok, fail = 0, 0
     for p in paths:
         if not p.exists():
-            print(f"⚠️  Datei nicht gefunden: {p}", file=sys.stderr)
+            print(f"⚠️  File not found: {p}", file=sys.stderr)
             fail += 1
             continue
         if process_file(p, args):
@@ -503,7 +503,7 @@ def main():
         else:
             fail += 1
 
-    print(f"\nFertig: {ok} erfolgreich, {fail} fehlgeschlagen.")
+    print(f"\nDone: {ok} successful, {fail} failed.")
     sys.exit(0 if fail == 0 else 1)
 
 
